@@ -10,6 +10,8 @@ RoutePlanner::RoutePlanner(RouteModel &model, float start_x, float start_y, floa
 
     // TODO 2: Use the m_Model.FindClosestNode method to find the closest nodes to the starting and ending coordinates.
     // Store the nodes you find in the RoutePlanner's start_node and end_node attributes.
+    start_node = &m_Model.FindClosestNode(start_x, start_y);
+    end_node = &m_Model.FindClosestNode(end_x, end_y);
 
 }
 
@@ -20,7 +22,7 @@ RoutePlanner::RoutePlanner(RouteModel &model, float start_x, float start_y, floa
 // - Node objects have a distance method to determine the distance to another node.
 
 float RoutePlanner::CalculateHValue(RouteModel::Node const *node) {
-
+    return node->distance(*end_node);
 }
 
 
@@ -33,6 +35,18 @@ float RoutePlanner::CalculateHValue(RouteModel::Node const *node) {
 
 void RoutePlanner::AddNeighbors(RouteModel::Node *current_node) {
 
+    current_node->FindNeighbors();
+
+    // For each neighbor, set parent to current_node, h_value to distance
+    // to end_node, g_value to current_node g + distance to current_node.
+    for (auto neighbor : current_node->neighbors) {
+        neighbor->parent = current_node;
+        neighbor->g_value = current_node->g_value + current_node->distance(*neighbor);
+        neighbor->h_value = CalculateHValue(neighbor);
+        open_list.emplace_back(neighbor);
+        neighbor->visited = true;
+    }
+
 }
 
 
@@ -44,6 +58,19 @@ void RoutePlanner::AddNeighbors(RouteModel::Node *current_node) {
 // - Return the pointer.
 
 RouteModel::Node *RoutePlanner::NextNode() {
+    // sort the open_list based on the f_value=h_value+g_value
+    std::sort(open_list.begin(), open_list.end(), [](const auto & _1st, const auto & _2nd) {
+        return _1st->h_value + _1st->g_value < _2nd->h_value + _2nd->g_value;
+    });
+
+    // create a copy of the pointer to the Node with lowest f_value
+    RouteModel::Node *lowest_node = open_list.front();
+
+    // erase that node pointer from open_list
+    open_list.erase(open_list.begin());
+
+    // return the pointer copy
+    return lowest_node;
 
 }
 
@@ -62,6 +89,19 @@ std::vector<RouteModel::Node> RoutePlanner::ConstructFinalPath(RouteModel::Node 
     std::vector<RouteModel::Node> path_found;
 
     // TODO: Implement your solution here.
+    while (current_node->parent != nullptr)
+    {
+        // add current_node to path_found
+        path_found.push_back(*current_node);
+
+        // compute the distance between current_node and its parent node
+        distance += current_node->distance(*current_node->parent);
+
+        // update current_node to its parent
+        current_node = current_node->parent;
+    }
+
+    path_found.push_back(*current_node);
 
     distance *= m_Model.MetricScale(); // Multiply the distance by the scale of the map to get meters.
     return path_found;
@@ -80,5 +120,49 @@ void RoutePlanner::AStarSearch() {
     RouteModel::Node *current_node = nullptr;
 
     // TODO: Implement your solution here.
+    /*
+    end_node->parent = start_node ;
+    m_Model.path = ConstructFinalPath(end_node);
+    */
+
+    // set start_node->visited to true
+    start_node->visited = true;
+
+    // push start_node to back of open_list
+    open_list.push_back(start_node);
+
+    // initialize currnode to nullptr
+    RouteModel::Node *cNode = nullptr;
+
+    //std::cout << "AStarSearch()\n";
+    //std::cout << "AStarSearch: Before: Size of open_list = " << open_list.size() << "\n";
+
+    // while the open_list is not empty, traverse each node
+    while (open_list.size() > 0)
+    {
+
+        // get the best node in the open_list that is closest to end_node
+        cNode = NextNode();
+
+        //std::cout << "AStarSearch: After NextNode(): Size of open_list = " << open_list.size() << "\n";
+        //std::cout << "currnode->distance(*end_node) = " << currnode->distance(*end_node) << "\n";
+
+        // if we have reached our destination end_node
+        if (cNode->distance(*end_node) == 0)
+        {
+            // construct final path with currnode
+            // set m_Model.path with results
+            m_Model.path = ConstructFinalPath(cNode);
+
+            //std::cout << "m_Model.path.size() = " << m_Model.path.size() << "\n";
+
+            // exit
+            return;
+        }
+
+        // add neighbors with currnode
+        AddNeighbors(cNode);
+    }
+    return;
 
 }
